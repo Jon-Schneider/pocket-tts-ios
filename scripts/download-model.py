@@ -54,29 +54,17 @@ def download_model(output_dir: Path):
     # Download voice embeddings
     print("\n3. Downloading voice embeddings...")
 
-    # Alba is in the main model repo
-    alba_file = hf_hub_download(
-        repo_id="kyutai/pocket-tts-without-voice-cloning",
-        filename="embeddings/alba.safetensors",
-    )
-    shutil.copy(alba_file, voices_dir / "alba.safetensors")
-    print("   -> alba.safetensors")
-
-    # Additional voices from tts-voices repo
-    additional_voices = [
-        "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"
+    voices = [
+        "alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"
     ]
 
-    for voice in additional_voices:
-        try:
-            voice_file = hf_hub_download(
-                repo_id="kyutai/tts-voices",
-                filename=f"{voice}.safetensors",
-            )
-            shutil.copy(voice_file, voices_dir / f"{voice}.safetensors")
-            print(f"   -> {voice}.safetensors")
-        except Exception as e:
-            print(f"   -> {voice}.safetensors (not available: {e})")
+    for voice in voices:
+        voice_file = hf_hub_download(
+            repo_id="kyutai/pocket-tts-without-voice-cloning",
+            filename=f"embeddings/{voice}.safetensors",
+        )
+        shutil.copy(voice_file, voices_dir / f"{voice}.safetensors")
+        print(f"   -> {voice}.safetensors")
 
     print(f"\n✓ Model downloaded successfully to {output_dir}")
     print("\nDirectory structure:")
