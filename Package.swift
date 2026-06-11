@@ -20,8 +20,8 @@ let package = Package(
         ),
         .binaryTarget(
             name: "PocketTTS",
-            url: "https://github.com/Jon-Schneider/pocket-tts-ios/releases/download/v0.4.1-spm/PocketTTS-v0.4.1-spm.zip",
-            checksum: "b2d27333755eabd2a71e897de55f21044badf425d991e2e6568babe9cba146da"
+            url: "https://github.com/Jon-Schneider/pocket-tts-ios/releases/download/v0.4.2-spm/PocketTTS-v0.4.2-spm.zip",
+            checksum: "58e1dc673cb53820ecfc58dad87ede9dff43403de193bc79491fab3ed02d8288"
         ),
     ]
 )

@@ -12,7 +12,7 @@ import Foundation
 #endif
 
 private extension RustBuffer {
-    // Allocate a new buffer, copying the contents of a `UInt8` array.
+    /// Allocate a new buffer, copying the contents of a `UInt8` array.
     init(bytes: [UInt8]) {
         let rbuf = bytes.withUnsafeBufferPointer { ptr in
             RustBuffer.from(ptr)
@@ -28,8 +28,8 @@ private extension RustBuffer {
         try! rustCall { ffi_pocket_tts_ios_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
-    // Frees the buffer in place.
-    // The buffer must not be used after this is called.
+    /// Frees the buffer in place.
+    /// The buffer must not be used after this is called.
     func deallocate() {
         try! rustCall { ffi_pocket_tts_ios_rustbuffer_free(self, $0) }
     }
@@ -76,9 +76,9 @@ private func createReader(data: Data) -> (data: Data, offset: Data.Index) {
     (data: data, offset: 0)
 }
 
-// Reads an integer at the current offset, in big-endian order, and advances
-// the offset on success. Throws if reading the integer would move the
-// offset past the end of the buffer.
+/// Reads an integer at the current offset, in big-endian order, and advances
+/// the offset on success. Throws if reading the integer would move the
+/// offset past the end of the buffer.
 private func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offset: Data.Index)) throws -> T {
     let range = reader.offset ..< reader.offset + MemoryLayout<T>.size
     guard reader.data.count >= range.upperBound else {
@@ -95,8 +95,8 @@ private func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offset: 
     return value.bigEndian
 }
 
-// Reads an arbitrary number of bytes, to be used to read
-// raw bytes, this is useful when lifting strings
+/// Reads an arbitrary number of bytes, to be used to read
+/// raw bytes, this is useful when lifting strings
 private func readBytes(_ reader: inout (data: Data, offset: Data.Index), count: Int) throws -> [UInt8] {
     let range = reader.offset ..< (reader.offset + count)
     guard reader.data.count >= range.upperBound else {
@@ -110,17 +110,17 @@ private func readBytes(_ reader: inout (data: Data, offset: Data.Index), count: 
     return value
 }
 
-// Reads a float at the current offset.
+/// Reads a float at the current offset.
 private func readFloat(_ reader: inout (data: Data, offset: Data.Index)) throws -> Float {
     return try Float(bitPattern: readInt(&reader))
 }
 
-// Reads a float at the current offset.
+/// Reads a float at the current offset.
 private func readDouble(_ reader: inout (data: Data, offset: Data.Index)) throws -> Double {
     return try Double(bitPattern: readInt(&reader))
 }
 
-// Indicates if the offset has reached the end of the buffer.
+/// Indicates if the offset has reached the end of the buffer.
 private func hasRemaining(_ reader: (data: Data, offset: Data.Index)) -> Bool {
     return reader.offset < reader.data.count
 }
@@ -133,14 +133,14 @@ private func createWriter() -> [UInt8] {
     return []
 }
 
-private func writeBytes<S>(_ writer: inout [UInt8], _ byteArr: S) where S: Sequence, S.Element == UInt8 {
+private func writeBytes<S: Sequence>(_ writer: inout [UInt8], _ byteArr: S) where S.Element == UInt8 {
     writer.append(contentsOf: byteArr)
 }
 
-// Writes an integer in big-endian order.
-//
-// Warning: make sure what you are trying to write
-// is in the correct type!
+/// Writes an integer in big-endian order.
+///
+/// Warning: make sure what you are trying to write
+/// is in the correct type!
 private func writeInt<T: FixedWidthInteger>(_ writer: inout [UInt8], _ value: T) {
     var value = value.bigEndian
     withUnsafeBytes(of: &value) { writer.append(contentsOf: $0) }
@@ -154,8 +154,8 @@ private func writeDouble(_ writer: inout [UInt8], _ value: Double) {
     writeInt(&writer, value.bitPattern)
 }
 
-// Protocol for types that transfer other types across the FFI. This is
-// analogous to the Rust trait of the same name.
+/// Protocol for types that transfer other types across the FFI. This is
+/// analogous to the Rust trait of the same name.
 private protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
@@ -166,7 +166,7 @@ private protocol FfiConverter {
     static func write(_ value: SwiftType, into buf: inout [UInt8])
 }
 
-// Types conforming to `Primitive` pass themselves directly over the FFI.
+/// Types conforming to `Primitive` pass themselves directly over the FFI.
 private protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType {}
 
 extension FfiConverterPrimitive {
@@ -185,8 +185,8 @@ extension FfiConverterPrimitive {
     }
 }
 
-// Types conforming to `FfiConverterRustBuffer` lift and lower into a `RustBuffer`.
-// Used for complex types where it's hard to write a custom lift/lower.
+/// Types conforming to `FfiConverterRustBuffer` lift and lower into a `RustBuffer`.
+/// Used for complex types where it's hard to write a custom lift/lower.
 private protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
@@ -213,8 +213,8 @@ extension FfiConverterRustBuffer {
     }
 }
 
-// An error type for FFI errors. These errors occur at the UniFFI level, not
-// the library level.
+/// An error type for FFI errors. These errors occur at the UniFFI level, not
+/// the library level.
 private enum UniffiInternalError: LocalizedError {
     case bufferOverflow
     case incompleteData
@@ -565,6 +565,8 @@ public protocol PocketTtsEngineProtocol: AnyObject {
 
     func synthesize(text: String) throws -> SynthesisResult
 
+    func synthesizeNoiseMatched(text: String, voiceIndex: UInt32, noiseDir: String, phraseId: String, seed: UInt32) throws -> SynthesisResult
+
     func synthesizeWithVoice(text: String, voiceIndex: UInt32) throws -> SynthesisResult
 
     func unload()
@@ -575,7 +577,7 @@ open class PocketTtsEngine:
 {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    // Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
     #if swift(>=5.8)
         @_documentation(visibility: private)
     #endif
@@ -627,20 +629,23 @@ open class PocketTtsEngine:
         try! rustCall { uniffi_pocket_tts_ios_fn_free_pocketttsengine(pointer, $0) }
     }
 
-    open func cancel() { try! rustCall {
-        uniffi_pocket_tts_ios_fn_method_pocketttsengine_cancel(self.uniffiClonePointer(), $0)
-    }
-    }
-
-    open func clearReferenceAudio() { try! rustCall {
-        uniffi_pocket_tts_ios_fn_method_pocketttsengine_clear_reference_audio(self.uniffiClonePointer(), $0)
-    }
+    open func cancel() {
+        try! rustCall {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_cancel(self.uniffiClonePointer(), $0)
+        }
     }
 
-    open func configure(config: TtsConfig) throws { try rustCallWithError(FfiConverterTypePocketTTSError.lift) {
-        uniffi_pocket_tts_ios_fn_method_pocketttsengine_configure(self.uniffiClonePointer(),
-                                                                  FfiConverterTypeTTSConfig.lower(config), $0)
+    open func clearReferenceAudio() {
+        try! rustCall {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_clear_reference_audio(self.uniffiClonePointer(), $0)
+        }
     }
+
+    open func configure(config: TtsConfig) throws {
+        try rustCallWithError(FfiConverterTypePocketTTSError.lift) {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_configure(self.uniffiClonePointer(),
+                                                                      FfiConverterTypeTTSConfig.lower(config), $0)
+        }
     }
 
     open func decodeLatents(latentsData: Data, numFrames: UInt32) throws -> SynthesisResult {
@@ -675,24 +680,37 @@ open class PocketTtsEngine:
         })
     }
 
-    open func setReferenceAudio(audioData: Data, sampleRate: UInt32) throws { try rustCallWithError(FfiConverterTypePocketTTSError.lift) {
-        uniffi_pocket_tts_ios_fn_method_pocketttsengine_set_reference_audio(self.uniffiClonePointer(),
-                                                                            FfiConverterData.lower(audioData),
-                                                                            FfiConverterUInt32.lower(sampleRate), $0)
-    }
+    open func setReferenceAudio(audioData: Data, sampleRate: UInt32) throws {
+        try rustCallWithError(FfiConverterTypePocketTTSError.lift) {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_set_reference_audio(self.uniffiClonePointer(),
+                                                                                FfiConverterData.lower(audioData),
+                                                                                FfiConverterUInt32.lower(sampleRate), $0)
+        }
     }
 
-    open func startTrueStreaming(text: String, handler: TtsEventHandler) throws { try rustCallWithError(FfiConverterTypePocketTTSError.lift) {
-        uniffi_pocket_tts_ios_fn_method_pocketttsengine_start_true_streaming(self.uniffiClonePointer(),
-                                                                             FfiConverterString.lower(text),
-                                                                             FfiConverterCallbackInterfaceTtsEventHandler.lower(handler), $0)
-    }
+    open func startTrueStreaming(text: String, handler: TtsEventHandler) throws {
+        try rustCallWithError(FfiConverterTypePocketTTSError.lift) {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_start_true_streaming(self.uniffiClonePointer(),
+                                                                                 FfiConverterString.lower(text),
+                                                                                 FfiConverterCallbackInterfaceTtsEventHandler.lower(handler), $0)
+        }
     }
 
     open func synthesize(text: String) throws -> SynthesisResult {
         return try FfiConverterTypeSynthesisResult.lift(rustCallWithError(FfiConverterTypePocketTTSError.lift) {
             uniffi_pocket_tts_ios_fn_method_pocketttsengine_synthesize(self.uniffiClonePointer(),
                                                                        FfiConverterString.lower(text), $0)
+        })
+    }
+
+    open func synthesizeNoiseMatched(text: String, voiceIndex: UInt32, noiseDir: String, phraseId: String, seed: UInt32) throws -> SynthesisResult {
+        return try FfiConverterTypeSynthesisResult.lift(rustCallWithError(FfiConverterTypePocketTTSError.lift) {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_synthesize_noise_matched(self.uniffiClonePointer(),
+                                                                                     FfiConverterString.lower(text),
+                                                                                     FfiConverterUInt32.lower(voiceIndex),
+                                                                                     FfiConverterString.lower(noiseDir),
+                                                                                     FfiConverterString.lower(phraseId),
+                                                                                     FfiConverterUInt32.lower(seed), $0)
         })
     }
 
@@ -704,9 +722,10 @@ open class PocketTtsEngine:
         })
     }
 
-    open func unload() { try! rustCall {
-        uniffi_pocket_tts_ios_fn_method_pocketttsengine_unload(self.uniffiClonePointer(), $0)
-    }
+    open func unload() {
+        try! rustCall {
+            uniffi_pocket_tts_ios_fn_method_pocketttsengine_unload(self.uniffiClonePointer(), $0)
+        }
     }
 }
 
@@ -762,8 +781,8 @@ public struct AudioChunk {
     public var sampleRate: UInt32
     public var isFinal: Bool
 
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
     public init(audioData: Data, sampleRate: UInt32, isFinal: Bool) {
         self.audioData = audioData
         self.sampleRate = sampleRate
@@ -832,8 +851,8 @@ public struct PocketVoiceInfo {
     public var gender: String
     public var description: String
 
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
     public init(index: UInt32, name: String, gender: String, description: String) {
         self.index = index
         self.name = name
@@ -909,8 +928,8 @@ public struct SynthesisResult {
     public var channels: UInt32
     public var durationSeconds: Double
 
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
     public init(audioData: Data, sampleRate: UInt32, channels: UInt32, durationSeconds: Double) {
         self.audioData = audioData
         self.sampleRate = sampleRate
@@ -989,8 +1008,8 @@ public struct TtsConfig {
     public var useFixedSeed: Bool
     public var seed: UInt32
 
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
     public init(voiceIndex: UInt32, temperature: Float, topP: Float, speed: Float, consistencySteps: UInt32, useFixedSeed: Bool, seed: UInt32) {
         self.voiceIndex = voiceIndex
         self.temperature = temperature
@@ -1184,18 +1203,18 @@ public protocol TtsEventHandler: AnyObject {
     func onError(message: String)
 }
 
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
+/// Magic number for the Rust proxy to call using the same mechanism as every other method,
+/// to free the callback once it's dropped by Rust.
 private let IDX_CALLBACK_FREE: Int32 = 0
 // Callback return codes
 private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
 private let UNIFFI_CALLBACK_ERROR: Int32 = 1
 private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
-// Put the implementation in a struct so we don't pollute the top-level namespace
+/// Put the implementation in a struct so we don't pollute the top-level namespace
 private enum UniffiCallbackInterfaceTTSEventHandler {
-    // Create the VTable using a series of closures.
-    // Swift automatically converts these into C callback functions.
+    /// Create the VTable using a series of closures.
+    /// Swift automatically converts these into C callback functions.
     static var vtable: UniffiVTableCallbackInterfaceTtsEventHandler = .init(
         onAudioChunk: { (
             uniffiHandle: UInt64,
@@ -1372,15 +1391,13 @@ private struct FfiConverterSequenceTypePocketVoiceInfo: FfiConverterRustBuffer {
 
 public func availableVoices() -> [PocketVoiceInfo] {
     return try! FfiConverterSequenceTypePocketVoiceInfo.lift(try! rustCall {
-        uniffi_pocket_tts_ios_fn_func_available_voices($0
-        )
+        uniffi_pocket_tts_ios_fn_func_available_voices($0)
     })
 }
 
 public func version() -> String {
     return try! FfiConverterString.lift(try! rustCall {
-        uniffi_pocket_tts_ios_fn_func_version($0
-        )
+        uniffi_pocket_tts_ios_fn_func_version($0)
     })
 }
 
@@ -1390,8 +1407,8 @@ private enum InitializationResult {
     case apiChecksumMismatch
 }
 
-// Use a global variable to perform the versioning checks. Swift ensures that
-// the code inside is only computed once.
+/// Use a global variable to perform the versioning checks. Swift ensures that
+/// the code inside is only computed once.
 private var initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 26
@@ -1437,6 +1454,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_pocket_tts_ios_checksum_method_pocketttsengine_synthesize() != 33210 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_pocket_tts_ios_checksum_method_pocketttsengine_synthesize_noise_matched() != 5576 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_pocket_tts_ios_checksum_method_pocketttsengine_synthesize_with_voice() != 47071 {
