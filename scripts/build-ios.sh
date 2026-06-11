@@ -45,6 +45,17 @@ echo "Building for iOS simulator (aarch64-apple-ios-sim)..."
 export CMAKE_TOOLCHAIN_FILE="$PROJECT_DIR/cmake/ios-simulator.toolchain.cmake"
 cargo build --release --target aarch64-apple-ios-sim
 
+# Build for Mac Catalyst (arm64). Catalyst ("macabi") builds against the macOS SDK with the iOS-on-macOS
+# ABI, selected by the `arm64-apple-ios-macabi` triple in maccatalyst.toolchain.cmake. sentencepiece's
+# CMake build wants the default (Makefile) generator here rather than Xcode, so unset CMAKE_GENERATOR for
+# this slice (the toolchain still defines the set_xcode_property macro sentencepiece references).
+echo ""
+echo "Building for Mac Catalyst (aarch64-apple-ios-macabi)..."
+rustup target add aarch64-apple-ios-macabi 2>/dev/null || true
+unset CMAKE_GENERATOR
+export CMAKE_TOOLCHAIN_FILE="$PROJECT_DIR/cmake/maccatalyst.toolchain.cmake"
+cargo build --release --target aarch64-apple-ios-macabi
+
 # Generate Swift bindings
 # Unset iOS CMake variables so uniffi-bindgen builds for the host
 echo ""
@@ -95,6 +106,7 @@ echo "Creating XCFramework..."
 
 DEVICE_LIB="$PROJECT_DIR/target/aarch64-apple-ios/release/libpocket_tts_ios.a"
 SIM_LIB="$PROJECT_DIR/target/aarch64-apple-ios-sim/release/libpocket_tts_ios.a"
+CATALYST_LIB="$PROJECT_DIR/target/aarch64-apple-ios-macabi/release/libpocket_tts_ios.a"
 
 if [ ! -f "$DEVICE_LIB" ]; then
     echo "Error: Device library not found at $DEVICE_LIB"
@@ -106,10 +118,17 @@ if [ ! -f "$SIM_LIB" ]; then
     exit 1
 fi
 
+if [ ! -f "$CATALYST_LIB" ]; then
+    echo "Error: Mac Catalyst library not found at $CATALYST_LIB"
+    exit 1
+fi
+
 xcodebuild -create-xcframework \
     -library "$DEVICE_LIB" \
     -headers "$HEADERS_DIR" \
     -library "$SIM_LIB" \
+    -headers "$HEADERS_DIR" \
+    -library "$CATALYST_LIB" \
     -headers "$HEADERS_DIR" \
     -output "$OUTPUT_DIR/$FRAMEWORK_NAME.xcframework"
 
