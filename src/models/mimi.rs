@@ -441,6 +441,12 @@ struct DecoderTransformerLayer {
     // Streaming state (KV cache)
     k_cache: Option<Tensor>,
     v_cache: Option<Tensor>,
+    /// Absolute position of the next streamed token, used as the RoPE offset. Tracked separately
+    /// from the KV cache length because the cache is trimmed to `context`, so its length stops
+    /// growing once full — using it as the RoPE offset would freeze the rotary positions and
+    /// collapse positional encoding mid-utterance (progressive distortion). This counter keeps
+    /// increasing so RoPE stays consistent with the non-streaming `forward` (offset 0..seq).
+    abs_pos: usize,
 }
 
 impl DecoderTransformerLayer {
@@ -476,6 +482,7 @@ impl DecoderTransformerLayer {
             context,
             k_cache: None,
             v_cache: None,
+            abs_pos: 0,
         })
     }
 
@@ -652,8 +659,11 @@ impl DecoderTransformerLayer {
         let (batch, seq, dim) = x.dims3()?;
         let device = x.device();
 
-        // Get current cache length (for RoPE offset)
-        let offset = self.k_cache.as_ref().map_or(0, |k| k.dim(2).unwrap_or(0));
+        // RoPE offset is the absolute position of this token, NOT the (trimmed) cache length.
+        // The cache is capped at `context`, so its length plateaus once full; using it here would
+        // freeze the rotary positions and progressively destroy positional encoding. `abs_pos`
+        // keeps counting so streaming RoPE matches the non-streaming `forward` (positions 0..seq).
+        let offset = self.abs_pos;
 
         // Self-attention
         let h = self.norm1.forward(x)?;
@@ -732,7 +742,13 @@ impl DecoderTransformerLayer {
         let h = self.linear2.forward(&h)?;
 
         let h = h.broadcast_mul(&self.layer_scale_2)?;
-        x + h
+        let out = (x + h)?;
+
+        // Advance the absolute position by the number of tokens just processed, so the next
+        // streamed call RoPE-rotates from the correct (ever-increasing) position.
+        self.abs_pos += seq;
+
+        Ok(out)
     }
 
     /// Build causal mask for streaming attention.
@@ -775,6 +791,7 @@ impl DecoderTransformerLayer {
     fn reset_cache(&mut self) {
         self.k_cache = None;
         self.v_cache = None;
+        self.abs_pos = 0;
     }
 }
 
