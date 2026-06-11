@@ -191,6 +191,7 @@ fn main() {
     let mut noise_dir: Option<PathBuf> = None;
     let mut noise_phrase_id: String = "phrase_00".to_string();
     let mut dump_mimi_dir: Option<PathBuf> = None;
+    let mut true_streaming = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -291,6 +292,9 @@ fn main() {
                     i += 1;
                 }
             },
+            "--true-streaming" => {
+                true_streaming = true;
+            },
             "--dump-mimi" => {
                 if i + 1 < args.len() {
                     dump_mimi_dir = Some(PathBuf::from(&args[i + 1]));
@@ -343,6 +347,8 @@ fn main() {
             json_report.as_ref().map(|v| &**v),
             extended_validation,
         );
+    } else if true_streaming {
+        run_true_streaming(&model_dir, &output_path, &test_text, &tts_config);
     } else {
         run_single_phrase(
             &model_dir,
@@ -493,6 +499,44 @@ fn run_validation_mode(model_dir: &Path, output_dir: &Path, json_report: Option<
         println!("\nSome outputs have signal issues (NaN, Inf, silence, or clipping).");
         std::process::exit(1);
     }
+}
+
+/// Run the TRUE streaming path (same code the iOS app drives via `start_true_streaming`),
+/// accumulating all streamed chunks into one WAV so the streaming Mimi decode can be
+/// compared off-device against the offline `synthesize` path.
+fn run_true_streaming(model_dir: &Path, output_path: &Path, test_text: &str, config: &TTSConfig) {
+    println!("Configuration (TRUE STREAMING):");
+    println!("  Model directory: {}", model_dir.display());
+    println!("  Output file: {}", output_path.display());
+    println!("  Test text: \"{}\"", test_text);
+    println!("  Consistency steps: {}", config.consistency_steps);
+
+    let mut model = load_model(model_dir);
+    if let Err(e) = model.configure(config.clone()) {
+        eprintln!("ERROR: Invalid config: {:?}", e);
+        std::process::exit(1);
+    }
+    let sample_rate = model.sample_rate();
+
+    let mut audio: Vec<f32> = Vec::new();
+    let mut chunk_count = 0usize;
+    let result = model.synthesize_true_streaming(test_text, |samples, is_final| {
+        chunk_count += 1;
+        println!("  chunk {}: {} samples (final={})", chunk_count, samples.len(), is_final);
+        audio.extend_from_slice(samples);
+        true
+    });
+    if let Err(e) = result {
+        eprintln!("ERROR: streaming synthesis failed: {:?}", e);
+        std::process::exit(1);
+    }
+
+    println!("Streaming complete: {} chunks, {} samples ({:.2}s)", chunk_count, audio.len(), audio.len() as f32 / sample_rate as f32);
+    if let Err(e) = write_wav(output_path, &audio, sample_rate) {
+        eprintln!("ERROR: Failed to write WAV: {:?}", e);
+        std::process::exit(1);
+    }
+    println!("Wrote {}", output_path.display());
 }
 
 /// Run single phrase mode (original behavior)

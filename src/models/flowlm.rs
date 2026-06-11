@@ -665,14 +665,29 @@ impl FlowLM {
 
         // Phase 1: Process voice embeddings FIRST (if provided)
         if let Some(voice) = voice_embedding {
-            let voice_emb = voice.embedding().unsqueeze(0)?;
-            let voice_emb = voice_emb.broadcast_as((batch_size, voice_emb.dim(1)?, voice_emb.dim(2)?))?;
+            if let Some(state) = voice.kv_state() {
+                // Pocket TTS v2 voice format: load the precomputed per-layer self-attention KV
+                // cache directly (bos_before_voice + speaker projection baked in offline), exactly
+                // as generate_latents() does. On the v2 path `voice.embedding()` is only a zeros
+                // placeholder, so running it through the transformer (the v1 branch below) would
+                // leave the stream with NO voice context — yielding garbage latents, an early EOS,
+                // and near-silent clicking. This is the streaming counterpart of the v2 fix that
+                // had only been applied to the offline generator.
+                for (i, (k, v)) in state.layers.iter().enumerate() {
+                    if i < self.kv_caches.len() {
+                        self.kv_caches[i].set(k.clone(), v.clone());
+                    }
+                }
+            } else {
+                let voice_emb = voice.embedding().unsqueeze(0)?;
+                let voice_emb = voice_emb.broadcast_as((batch_size, voice_emb.dim(1)?, voice_emb.dim(2)?))?;
 
-            let mut hidden = voice_emb;
-            for (i, layer) in self.layers.iter().enumerate() {
-                hidden = layer.forward(&hidden, &self.rotary, Some(&mut self.kv_caches[i]), None)?;
+                let mut hidden = voice_emb;
+                for (i, layer) in self.layers.iter().enumerate() {
+                    hidden = layer.forward(&hidden, &self.rotary, Some(&mut self.kv_caches[i]), None)?;
+                }
+                let _ = self.final_norm.forward(&hidden)?;
             }
-            let _ = self.final_norm.forward(&hidden)?;
         }
 
         // Phase 2: Process text embeddings (appends to KV cache)
